@@ -1,11 +1,11 @@
-# Team Radar
+# OrcaDive
 
-Async standup replacement for small dev teams. See what your team is working on, get AI-suggested status updates from your GitHub activity, and track open PRs — all in real time.
+Async standup replacement for small dev teams. See what your team — humans and AI agents — is working on, get AI-suggested status updates from your GitHub activity, track open PRs, and orchestrate agent tasks — all in real time.
 
 ## Monorepo structure
 
 ```
-team-radar/
+orca-dive/
 ├── mobile/                    React Native (Expo) — iOS + Android
 │   ├── app/
 │   │   ├── _layout.tsx        ← root layout + auth guard
@@ -65,7 +65,7 @@ team-radar/
 Go to https://github.com/settings/developers → New OAuth App:
 
 - **Homepage URL**: `http://localhost:3000`
-- **Callback URL**: `teamradar://auth`
+- **Callback URL**: `orcadive://auth`
 
 Save the Client ID and Client Secret — you'll need them below.
 
@@ -79,8 +79,8 @@ cp .env.example .env
 npm install
 
 # Create the database (requires PostgreSQL running locally)
-createdb team_radar
-psql team_radar -f src/db/schema.sql
+createdb orca_dive
+psql orca_dive -f src/db/schema.sql
 
 # Start dev server
 npm run dev
@@ -114,7 +114,7 @@ For Android: scan with the Expo Go app.
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string (e.g. `postgresql://localhost:5432/team_radar`) |
+| `DATABASE_URL` | PostgreSQL connection string (e.g. `postgresql://localhost:5432/orca_dive`) |
 | `JWT_SECRET` | Long random string for signing JWTs — generate with `openssl rand -hex 32` |
 | `GITHUB_CLIENT_ID` | From your GitHub OAuth App |
 | `GITHUB_CLIENT_SECRET` | From your GitHub OAuth App |

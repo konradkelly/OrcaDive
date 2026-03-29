@@ -14,7 +14,7 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.body}>
-        <Text style={styles.title}>Team Radar</Text>
+        <Text style={styles.title}>OrcaDive</Text>
         <Text style={styles.subtitle}>
           See what your team is working on, powered by GitHub.
         </Text>

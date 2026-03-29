@@ -2,10 +2,10 @@ import { ExpoConfig, ConfigContext } from "expo/config";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "Team Radar",
-  slug: "team-radar",
+  name: "OrcaDive",
+  slug: "orca-dive",
   version: "1.0.0",
-  scheme: "teamradar",
+  scheme: "orcadive",
   orientation: "portrait",
   icon: "./assets/icon.png",
   splash: {
@@ -20,7 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "expo-auth-session",
       {
         // Add your GitHub OAuth app's callback URL here
-        // Format: teamradar://auth
+        // Format: orcadive://auth
       },
     ],
   ],

@@ -58,5 +58,5 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT ?? 3000;
 httpServer.listen(PORT, () => {
-  console.log(`Team Radar server running on port ${PORT}`);
+  console.log(`OrcaDive server running on port ${PORT}`);
 });

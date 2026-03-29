@@ -20,7 +20,7 @@ export function useGitHubAuth() {
   const [error, setError] = useState<string | null>(null);
   const { setToken } = useAuthStore();
 
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: "teamradar" });
+  const redirectUri = AuthSession.makeRedirectUri({ scheme: "orcadive" });
 
   const [request, , promptAsync] = AuthSession.useAuthRequest(
     {

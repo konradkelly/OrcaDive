@@ -30,7 +30,7 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Team Radar</Text>
+        <Text style={styles.title}>OrcaDive</Text>
         <Text style={styles.subtitle}>
           {members.filter((m) => m.updatedToday).length}/{members.length} updated today
           {activeAgents.length > 0 && ` · ${activeAgents.length} agent${activeAgents.length > 1 ? "s" : ""}`}
