@@ -54,6 +54,38 @@ CREATE TABLE IF NOT EXISTS team_repos (
   UNIQUE(team_id, repo_full_name)
 );
 
+-- AI agents registered to a team
+CREATE TABLE IF NOT EXISTS agents (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id     UUID NOT NULL REFERENCES teams(id),
+  name        TEXT NOT NULL,                    -- e.g. "Copilot Coding Agent"
+  type        TEXT NOT NULL DEFAULT 'custom',   -- custom, copilot, ci
+  avatar_url  TEXT,
+  api_key_hash TEXT NOT NULL,                   -- SHA-256 of the agent's API key
+  status      TEXT NOT NULL DEFAULT 'idle',     -- idle, running, error, offline
+  last_seen   TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agents_team
+  ON agents(team_id);
+
+-- Agent run history (tasks assigned or self-reported)
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id    UUID NOT NULL REFERENCES agents(id),
+  team_id     UUID NOT NULL REFERENCES teams(id),
+  task        TEXT NOT NULL,                     -- "Run linter on PR #47"
+  status      TEXT NOT NULL DEFAULT 'pending',   -- pending, running, success, failure, cancelled
+  output      TEXT,                              -- summary or log output
+  started_at  TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runs_agent
+  ON agent_runs(agent_id, created_at DESC);
+
 -- Convenience view: latest status per user
 CREATE OR REPLACE VIEW latest_statuses AS
   SELECT DISTINCT ON (user_id)

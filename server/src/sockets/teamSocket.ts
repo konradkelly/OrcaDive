@@ -8,6 +8,15 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
   console.log(`User ${userId} joined team:${teamId}`);
 
+  // Client requests to subscribe to a specific agent's run updates
+  socket.on("agent:subscribe", (agentId: string) => {
+    socket.join(`agent:${agentId}`);
+  });
+
+  socket.on("agent:unsubscribe", (agentId: string) => {
+    socket.leave(`agent:${agentId}`);
+  });
+
   socket.on("disconnect", () => {
     console.log(`User ${userId} disconnected`);
   });

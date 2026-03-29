@@ -30,6 +30,12 @@ app.use("/api/status", authenticate, statusRouter);
 app.use("/api/ai", authenticate, suggestRouter);
 app.use("/api/team", authenticate, prRouter);
 
+// Agent routes — mixed auth (JWT for user-facing, API key for webhook endpoints)
+// Webhook routes are mounted first without JWT — they use their own API key auth
+import { agentWebhookRouter, agentUserRouter } from "./routes/agents";
+app.use("/api/agents/webhook", agentWebhookRouter);
+app.use("/api/agents", authenticate, agentUserRouter);
+
 // WebSocket auth + event handlers
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;

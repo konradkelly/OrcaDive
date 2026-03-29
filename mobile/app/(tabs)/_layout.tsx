@@ -25,6 +25,10 @@ export default function TabLayout() {
         options={{ title: "PRs" }}
       />
       <Tabs.Screen
+        name="agents"
+        options={{ title: "Agents" }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{ title: "Settings" }}
       />

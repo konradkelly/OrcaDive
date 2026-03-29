@@ -17,13 +17,15 @@ team-radar/
 │   │       ├── dashboard.tsx  ← live team feed
 │   │       ├── status.tsx     ← post my update (AI pre-fill)
 │   │       ├── prs.tsx        ← PR tracker
+│   │       ├── agents.tsx     ← agent list + detail + task assignment
 │   │       └── settings.tsx   ← sign out
 │   ├── components/
 │   │   ├── TeamMemberCard.tsx
 │   │   ├── StatusBadge.tsx    ← reusable PR status pill
-│   │   └── PRItem.tsx         ← reusable PR card
+│   │   ├── PRItem.tsx         ← reusable PR card
+│   │   └── AgentCard.tsx      ← AI agent card (full + compact)
 │   ├── hooks/
-│   │   ├── useTeamSocket.ts   ← WebSocket connection
+│   │   ├── useTeamSocket.ts   ← WebSocket connection + agent events
 │   │   ├── useGitHubAuth.ts   ← Expo AuthSession OAuth flow
 │   │   └── useStatusSuggestion.ts
 │   ├── lib/
@@ -31,23 +33,26 @@ team-radar/
 │   └── store/
 │       ├── authStore.ts       ← Zustand — JWT + SecureStore
 │       ├── teamStore.ts       ← Zustand — team members
-│       └── prStore.ts         ← Zustand — pull requests
+│       ├── prStore.ts         ← Zustand — pull requests
+│       └── agentStore.ts     ← Zustand — AI agents + runs
 │
 └── server/                    Node.js + Express + Socket.io
     ├── src/
     │   ├── index.ts
     │   ├── db/
     │   │   ├── index.ts       ← pg Pool
-    │   │   └── schema.sql     ← teams, users, statuses, prs, team_repos
+    │   │   └── schema.sql     ← teams, users, statuses, prs, agents, agent_runs
     │   ├── middleware/
-    │   │   └── authenticate.ts
+    │   │   ├── authenticate.ts
+    │   │   └── authenticateAgent.ts  ← API key auth for agent webhooks
     │   ├── routes/
     │   │   ├── auth.ts        ← GitHub OAuth → JWT
     │   │   ├── status.ts      ← GET team / POST update
     │   │   ├── prs.ts         ← GitHub PR polling
-    │   │   └── suggest.ts     ← Claude AI suggestions
+    │   │   ├── suggest.ts     ← Claude AI suggestions
+    │   │   └── agents.ts      ← agent CRUD + task assignment + webhooks
     │   └── sockets/
-    │       └── teamSocket.ts  ← Socket.io room management
+    │       └── teamSocket.ts  ← Socket.io room management + agent events
     └── tsconfig.json
 ```
 
@@ -137,6 +142,7 @@ For Android: scan with the Expo Go app.
 | Backend — Status + Sockets | `server/src/routes/status.ts`, `server/src/sockets/teamSocket.ts` |
 | Integrations — GitHub + PRs | `server/src/routes/prs.ts`, `mobile/app/(tabs)/prs.tsx`, `components/PRItem.tsx`, `store/prStore.ts` |
 | AI Suggestions | `server/src/routes/suggest.ts` |
+| Agent Orchestration | `server/src/routes/agents.ts`, `server/src/middleware/authenticateAgent.ts`, `mobile/app/(tabs)/agents.tsx`, `mobile/store/agentStore.ts`, `mobile/components/AgentCard.tsx` |
 
 ---
 
@@ -150,9 +156,20 @@ For Android: scan with the Expo Go app.
 | `GET` | `/api/team/prs` | JWT | Fetch open PRs across team repos |
 | `POST` | `/api/team/repos` | JWT | Add a repo to track |
 | `POST` | `/api/ai/suggest` | JWT | Get AI-generated status from GitHub activity |
+| `GET` | `/api/agents` | JWT | List all agents for the team |
+| `POST` | `/api/agents` | JWT | Register a new agent (returns API key once) |
+| `DELETE` | `/api/agents/:id` | JWT | Remove an agent |
+| `GET` | `/api/agents/:id/runs` | JWT | Fetch run history for an agent |
+| `POST` | `/api/agents/:id/runs` | JWT | Assign a task to an agent |
+| `POST` | `/api/agents/:agentId/runs/:runId/cancel` | JWT | Cancel a pending/running task |
+| `POST` | `/api/agents/webhook/status` | API Key | Agent self-reports its status |
+| `POST` | `/api/agents/webhook/run` | API Key | Agent reports run progress/completion |
 
 WebSocket events:
 - `status:updated` — emitted to team room when a member posts an update
+- `agent:status_updated` — emitted when an agent's status changes
+- `agent:run_created` — emitted when a task is assigned to an agent
+- `agent:run_updated` — emitted when an agent run changes state
 
 WebSocket auth: pass JWT as `socket.handshake.auth.token`
 
@@ -183,7 +200,27 @@ Tables defined in `server/src/db/schema.sql`:
 - **statuses** — status updates (one per post, latest queried via `LATERAL`)
 - **prs** — cached PR records with author linkage (used for `openPRs` count)
 - **team_repos** — repos a team is tracking for PR polling
+- **agents** — AI agents registered to a team (name, type, api_key_hash, status, last_seen)
+- **agent_runs** — task assignments and their results (task, status, output, timestamps)
 - **latest_statuses** — convenience view (latest status per user)
+
+---
+
+## Agent webhook auth
+
+Agents authenticate via API key in the `Authorization` header:
+
+```
+Authorization: Bearer agent:<api-key>
+```
+
+The API key is returned **once** when you register an agent via `POST /api/agents` (JWT-authenticated). The server stores only a SHA-256 hash — the plaintext key cannot be retrieved again.
+
+Agent types: `custom`, `copilot`, `ci_bot`
+
+Agent statuses: `idle`, `running`, `error`, `offline`
+
+Run statuses: `pending`, `running`, `success`, `failure`, `cancelled`
 
 ---
 
@@ -195,3 +232,5 @@ Tables defined in `server/src/db/schema.sql`:
 - Team invite links (replace manual DB assignment)
 - GitHub webhook for real-time PR status updates (vs polling)
 - MMKV offline caching layer for mobile
+- Agent registration UI in Settings screen
+- Agent run log streaming via WebSocket
