@@ -25,7 +25,7 @@ orca-dive/
 │   │   ├── PRItem.tsx         ← reusable PR card
 │   │   └── AgentCard.tsx      ← AI agent card (full + compact)
 │   ├── hooks/
-│   │   ├── useTeamSocket.ts   ← WebSocket connection + agent events
+│   │   ├── useTeamSocket.ts   ← STOMP WebSocket connection + agent events
 │   │   ├── useGitHubAuth.ts   ← Expo AuthSession OAuth flow
 │   │   └── useStatusSuggestion.ts
 │   ├── lib/
@@ -36,24 +36,43 @@ orca-dive/
 │       ├── prStore.ts         ← Zustand — pull requests
 │       └── agentStore.ts     ← Zustand — AI agents + runs
 │
-└── server/                    Node.js + Express + Socket.io
-    ├── src/
-    │   ├── index.ts
-    │   ├── db/
-    │   │   ├── index.ts       ← pg Pool
-    │   │   └── schema.sql     ← teams, users, statuses, prs, agents, agent_runs
-    │   ├── middleware/
-    │   │   ├── authenticate.ts
-    │   │   └── authenticateAgent.ts  ← API key auth for agent webhooks
-    │   ├── routes/
-    │   │   ├── auth.ts        ← GitHub OAuth → JWT
-    │   │   ├── status.ts      ← GET team / POST update
-    │   │   ├── prs.ts         ← GitHub PR polling
-    │   │   ├── suggest.ts     ← Claude AI suggestions
-    │   │   └── agents.ts      ← agent CRUD + task assignment + webhooks
-    │   └── sockets/
-    │       └── teamSocket.ts  ← Socket.io room management + agent events
-    └── tsconfig.json
+└── server/                    Spring Boot + Kotlin
+    ├── build.gradle.kts       ← Gradle Kotlin DSL build config
+    ├── settings.gradle.kts
+    ├── gradle.properties      ← JDK path config
+    └── src/main/
+        ├── kotlin/com/orcadive/
+        │   ├── Application.kt         ← Spring Boot entry point
+        │   ├── db/
+        │   │   ├── Tables.kt          ← Exposed ORM table definitions
+        │   │   └── DatabaseConfig.kt  ← DataSource + Exposed wiring
+        │   ├── security/
+        │   │   ├── JwtUtil.kt              ← JWT sign/verify (jjwt)
+        │   │   ├── JwtAuthenticationFilter.kt
+        │   │   ├── AgentApiKeyFilter.kt    ← API key auth for agent webhooks
+        │   │   ├── SecurityConfig.kt       ← Spring Security config
+        │   │   ├── UserPrincipal.kt
+        │   │   ├── AgentPrincipal.kt
+        │   │   └── SecurityExtensions.kt
+        │   ├── dto/
+        │   │   ├── Requests.kt         ← request data classes
+        │   │   └── Responses.kt        ← response data classes
+        │   ├── service/
+        │   │   ├── GitHubService.kt    ← OAuth + PR fetch via WebClient
+        │   │   └── ClaudeService.kt    ← Anthropic API via WebClient
+        │   ├── controller/
+        │   │   ├── AuthController.kt           ← GitHub OAuth → JWT
+        │   │   ├── StatusController.kt         ← GET team / POST update
+        │   │   ├── PrController.kt             ← GitHub PR polling
+        │   │   ├── SuggestController.kt        ← Claude AI suggestions
+        │   │   ├── AgentController.kt          ← agent CRUD + task assignment
+        │   │   └── AgentWebhookController.kt   ← agent self-report endpoints
+        │   └── websocket/
+        │       ├── WebSocketConfig.kt          ← STOMP broker config
+        │       └── StompAuthInterceptor.kt     ← JWT auth on STOMP CONNECT
+        └── resources/
+            ├── application.yml    ← Spring config (DB, secrets, ports)
+            └── schema.sql         ← PostgreSQL schema
 ```
 
 ---
@@ -71,20 +90,27 @@ Save the Client ID and Client Secret — you'll need them below.
 
 ### 2. Server setup
 
+Requires **JDK 17+** and **PostgreSQL** running locally.
+
 ```bash
 cd server
-cp .env.example .env
-# Fill in .env with your values
 
-npm install
-
-# Create the database (requires PostgreSQL running locally)
+# Create the database
 createdb orca_dive
-psql orca_dive -f src/db/schema.sql
+psql orca_dive -f src/main/resources/schema.sql
 
-# Start dev server
-npm run dev
+# Set environment variables (or create a .env file and source it)
+export DATABASE_URL=postgresql://localhost:5432/orca_dive
+export JWT_SECRET=$(openssl rand -hex 32)
+export GITHUB_CLIENT_ID=your_client_id
+export GITHUB_CLIENT_SECRET=your_client_secret
+export ANTHROPIC_API_KEY=your_key
+
+# Build and run
+./gradlew bootRun
 ```
+
+On Windows, use `gradlew.bat bootRun` instead.
 
 Server runs on http://localhost:3000
 
@@ -110,7 +136,9 @@ For Android: scan with the Expo Go app.
 
 ## Environment variables
 
-### server/.env (required)
+### Server environment variables
+
+Set these as system env vars, or pass them via `-D` flags to `gradlew bootRun`. Spring Boot reads them via `application.yml` placeholders.
 
 | Variable | Description |
 |---|---|
@@ -120,7 +148,7 @@ For Android: scan with the Expo Go app.
 | `GITHUB_CLIENT_SECRET` | From your GitHub OAuth App |
 | `ANTHROPIC_API_KEY` | From https://console.anthropic.com |
 | `PORT` | Server port (default: `3000`) |
-| `NODE_ENV` | `development` or `production` |
+| `SPRING_PROFILES_ACTIVE` | `dev` or `prod` (optional) |
 
 ### mobile/.env (optional)
 
@@ -138,11 +166,11 @@ For Android: scan with the Expo Go app.
 | Mobile — Dashboard + UI | `mobile/app/(tabs)/dashboard.tsx`, `components/TeamMemberCard.tsx`, `components/StatusBadge.tsx`, `store/teamStore.ts` |
 | Mobile — Status + AI | `mobile/app/(tabs)/status.tsx`, `hooks/useStatusSuggestion.ts` |
 | Mobile — Auth + Settings | `mobile/app/(auth)/login.tsx`, `hooks/useGitHubAuth.ts`, `mobile/app/(tabs)/settings.tsx`, `store/authStore.ts` |
-| Backend — Auth + DB | `server/src/routes/auth.ts`, `server/src/db/schema.sql`, `server/src/middleware/authenticate.ts` |
-| Backend — Status + Sockets | `server/src/routes/status.ts`, `server/src/sockets/teamSocket.ts` |
-| Integrations — GitHub + PRs | `server/src/routes/prs.ts`, `mobile/app/(tabs)/prs.tsx`, `components/PRItem.tsx`, `store/prStore.ts` |
-| AI Suggestions | `server/src/routes/suggest.ts` |
-| Agent Orchestration | `server/src/routes/agents.ts`, `server/src/middleware/authenticateAgent.ts`, `mobile/app/(tabs)/agents.tsx`, `mobile/store/agentStore.ts`, `mobile/components/AgentCard.tsx` |
+| Backend — Auth + DB | `server/.../controller/AuthController.kt`, `server/.../db/Tables.kt`, `server/.../security/JwtUtil.kt` |
+| Backend — Status + WebSocket | `server/.../controller/StatusController.kt`, `server/.../websocket/WebSocketConfig.kt` |
+| Integrations — GitHub + PRs | `server/.../controller/PrController.kt`, `mobile/app/(tabs)/prs.tsx`, `components/PRItem.tsx`, `store/prStore.ts` |
+| AI Suggestions | `server/.../controller/SuggestController.kt`, `server/.../service/ClaudeService.kt` |
+| Agent Orchestration | `server/.../controller/AgentController.kt`, `server/.../security/AgentApiKeyFilter.kt`, `mobile/app/(tabs)/agents.tsx`, `mobile/store/agentStore.ts`, `mobile/components/AgentCard.tsx` |
 
 ---
 
@@ -165,13 +193,14 @@ For Android: scan with the Expo Go app.
 | `POST` | `/api/agents/webhook/status` | API Key | Agent self-reports its status |
 | `POST` | `/api/agents/webhook/run` | API Key | Agent reports run progress/completion |
 
-WebSocket events:
-- `status:updated` — emitted to team room when a member posts an update
-- `agent:status_updated` — emitted when an agent's status changes
-- `agent:run_created` — emitted when a task is assigned to an agent
-- `agent:run_updated` — emitted when an agent run changes state
+STOMP WebSocket destinations (subscribe via `/topic/team.{teamId}.*`):
+- `/topic/team.{teamId}.status` — when a member posts a status update
+- `/topic/team.{teamId}.agent.status` — when an agent's status changes
+- `/topic/team.{teamId}.agent.run.created` — when a task is assigned to an agent
+- `/topic/team.{teamId}.agent.run.updated` — when an agent run changes state
 
-WebSocket auth: pass JWT as `socket.handshake.auth.token`
+WebSocket endpoint: `/ws` (SockJS fallback enabled)
+STOMP auth: pass JWT as `token` header on CONNECT frame
 
 ---
 
@@ -193,7 +222,7 @@ A team invite flow is a good Phase 2 feature.
 
 ## DB schema
 
-Tables defined in `server/src/db/schema.sql`:
+Tables defined in `server/src/main/resources/schema.sql` (Exposed ORM mappings in `Tables.kt`):
 
 - **teams** — team groups
 - **users** — GitHub-authenticated users, linked to a team
