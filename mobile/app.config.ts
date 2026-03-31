@@ -16,13 +16,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "expo-router",
     "expo-secure-store",
-    [
-      "expo-auth-session",
-      {
-        // Add your GitHub OAuth app's callback URL here
-        // Format: orcadive://auth
-      },
-    ],
   ],
   extra: {
     API_URL: process.env.API_URL ?? "http://localhost:3000",

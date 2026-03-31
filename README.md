@@ -84,11 +84,52 @@ orca-dive/
 Go to https://github.com/settings/developers → New OAuth App:
 
 - **Homepage URL**: `http://localhost:3000`
-- **Callback URL**: `orcadive://auth`
+- **Callback URL**: Your Expo tunnel URI (e.g. `exp://uh6zbnk-youruser-8081.exp.direct`). You can find this in the Expo logs after running `npx expo start --tunnel`.
 
 Save the Client ID and Client Secret — you'll need them below.
 
-### 2. Server setup
+### 2. Environment variables
+
+Create a `.env` file in the **project root**:
+
+```env
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+JWT_SECRET=your_jwt_secret
+ANTHROPIC_API_KEY=your_key
+DATABASE_URL=jdbc:postgresql://localhost:5432/orcadive?user=orcadive&password=orcadive
+```
+
+Create a `.env` file in `mobile/`:
+
+```env
+API_URL=http://<your-pc-ip>:3000
+GITHUB_CLIENT_ID=your_client_id
+```
+
+### 3. Server setup (Docker Compose — recommended)
+
+Requires **Docker** with Docker Compose.
+
+```bash
+docker compose up --build -d
+```
+
+This starts PostgreSQL 16 and the Spring Boot server on port 3000. The database schema is automatically applied on first run.
+
+To view server logs:
+
+```bash
+docker logs orcadive-server-1 -f
+```
+
+To rebuild after code changes:
+
+```bash
+docker compose up --build -d
+```
+
+### Server setup (manual)
 
 Requires **JDK 17+** and **PostgreSQL** running locally.
 
@@ -96,36 +137,37 @@ Requires **JDK 17+** and **PostgreSQL** running locally.
 cd server
 
 # Create the database
-createdb orca_dive
-psql orca_dive -f src/main/resources/schema.sql
+createdb orcadive
+psql orcadive -f src/main/resources/schema.sql
 
-# Set environment variables (or create a .env file and source it)
-export DATABASE_URL=postgresql://localhost:5432/orca_dive
+# Set environment variables (or source your .env)
+export DATABASE_URL=jdbc:postgresql://localhost:5432/orcadive
 export JWT_SECRET=$(openssl rand -hex 32)
 export GITHUB_CLIENT_ID=your_client_id
 export GITHUB_CLIENT_SECRET=your_client_secret
 export ANTHROPIC_API_KEY=your_key
 
 # Build and run
-./gradlew bootRun
+./gradlew bootRun     # macOS/Linux
+gradlew.bat bootRun   # Windows
 ```
-
-On Windows, use `gradlew.bat bootRun` instead.
 
 Server runs on http://localhost:3000
 
-### 3. Mobile setup
+### 4. Mobile setup
 
 ```bash
 cd mobile
-npm install
+npm install --legacy-peer-deps
 
 # Install Expo Go on your phone (iOS or Android)
 # https://expo.dev/go
 
-npm start
+npx expo start --tunnel
 # Scan the QR code with Expo Go
 ```
+
+> **Note:** `--tunnel` mode is required when your phone is not on the same network, or when localhost resolution fails. It requires an Expo account (`npx expo login`).
 
 For iOS: scan the QR code with the Camera app.
 For Android: scan with the Expo Go app.
@@ -136,25 +178,23 @@ For Android: scan with the Expo Go app.
 
 ## Environment variables
 
-### Server environment variables
-
-Set these as system env vars, or pass them via `-D` flags to `gradlew bootRun`. Spring Boot reads them via `application.yml` placeholders.
+### Root `.env` (used by Docker Compose and server)
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string (e.g. `postgresql://localhost:5432/orca_dive`) |
+| `DATABASE_URL` | JDBC PostgreSQL connection string (e.g. `jdbc:postgresql://localhost:5432/orcadive?user=orcadive&password=orcadive`) |
 | `JWT_SECRET` | Long random string for signing JWTs — generate with `openssl rand -hex 32` |
 | `GITHUB_CLIENT_ID` | From your GitHub OAuth App |
 | `GITHUB_CLIENT_SECRET` | From your GitHub OAuth App |
 | `ANTHROPIC_API_KEY` | From https://console.anthropic.com |
-| `PORT` | Server port (default: `3000`) |
-| `SPRING_PROFILES_ACTIVE` | `dev` or `prod` (optional) |
 
-### mobile/.env (optional)
+> When using Docker Compose, `DATABASE_URL` is overridden automatically to point to the `db` container.
+
+### `mobile/.env`
 
 | Variable | Description |
 |---|---|
-| `API_URL` | Server URL (default: `http://localhost:3000`) |
+| `API_URL` | Server URL — use your PC's local IP for physical devices (e.g. `http://10.0.0.12:3000`) |
 | `GITHUB_CLIENT_ID` | Same Client ID as server — public, no secret on device |
 
 ---
