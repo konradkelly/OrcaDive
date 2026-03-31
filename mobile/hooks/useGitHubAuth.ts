@@ -2,6 +2,7 @@ import { useState } from "react";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../lib/api";
 
@@ -19,8 +20,11 @@ export function useGitHubAuth() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { setToken } = useAuthStore();
+  const router = useRouter();
 
   const redirectUri = AuthSession.makeRedirectUri({ scheme: "orcadive" });
+
+  console.log("OAuth redirect URI:", redirectUri);
 
   const [request, , promptAsync] = AuthSession.useAuthRequest(
     {
@@ -45,11 +49,14 @@ export function useGitHubAuth() {
       }
 
       const { code } = result.params;
+      const codeVerifier = request?.codeVerifier;
 
       // Exchange the GitHub code for our JWT via the backend
-      const { data } = await api.post("/auth/github", { code });
+      const { data } = await api.post("/auth/github", { code, redirectUri, codeVerifier });
       await setToken(data.token, data.userId);
-    } catch (err) {
+      router.replace("/(tabs)/dashboard");
+    } catch (err: any) {
+      console.error("Auth error:", err?.response?.data ?? err?.message ?? err);
       setError("Authentication failed. Please try again.");
     } finally {
       setIsLoading(false);

@@ -24,7 +24,7 @@ class AuthController(
 ) {
     @PostMapping("/github")
     fun githubAuth(@RequestBody body: GitHubAuthRequest): ResponseEntity<Any> {
-        val accessToken = gitHubService.exchangeCode(body.code)
+        val accessToken = gitHubService.exchangeCode(body.code, body.redirectUri, body.codeVerifier)
             ?: return ResponseEntity.status(401).body(mapOf("error" to "Failed to exchange code"))
 
         val ghUser = gitHubService.fetchUser(accessToken)
