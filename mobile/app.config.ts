@@ -13,6 +13,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     resizeMode: "contain",
     backgroundColor: "#0f172a",
   },
+  android: {
+    package: "com.cascadecoffee.orcadive",
+  },
   plugins: [
     "expo-router",
     "expo-secure-store",

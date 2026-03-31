@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 
 // === Auth ===
 data class GitHubAuthRequest(val code: String, val redirectUri: String? = null, val codeVerifier: String? = null)
+data class GitHubTokenRequest(val accessToken: String)
 
 // === Status ===
 data class PostStatusRequest(val text: String, val blockers: String? = null)

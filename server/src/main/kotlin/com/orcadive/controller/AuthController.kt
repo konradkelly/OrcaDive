@@ -4,6 +4,7 @@ import com.orcadive.db.TeamsTable
 import com.orcadive.db.UsersTable
 import com.orcadive.dto.AuthResponse
 import com.orcadive.dto.GitHubAuthRequest
+import com.orcadive.dto.GitHubTokenRequest
 import com.orcadive.security.JwtUtil
 import com.orcadive.service.GitHubService
 import org.jetbrains.exposed.sql.insertAndGetId
@@ -58,6 +59,48 @@ class AuthController(
                     it[displayName] = ghUser.name
                     it[avatarUrl] = ghUser.avatarUrl
                     it[githubToken] = accessToken
+                    it[UsersTable.teamId] = newTeamId
+                    it[createdAt] = OffsetDateTime.now()
+                }.value
+
+                newUserId to newTeamId
+            }
+        }
+
+        val token = jwtUtil.generateToken(userId, teamId, ghUser.login)
+        return ResponseEntity.ok(AuthResponse(token = token, userId = userId.toString(), username = ghUser.login))
+    }
+
+    @PostMapping("/github/token")
+    fun githubToken(@RequestBody body: GitHubTokenRequest): ResponseEntity<Any> {
+        val ghUser = gitHubService.fetchUser(body.accessToken)
+            ?: return ResponseEntity.status(401).body(mapOf("error" to "Failed to fetch GitHub user"))
+
+        val (userId, teamId) = transaction {
+            val existing = UsersTable.selectAll()
+                .where { UsersTable.githubId eq ghUser.id }
+                .singleOrNull()
+
+            if (existing != null) {
+                UsersTable.update({ UsersTable.githubId eq ghUser.id }) {
+                    it[username] = ghUser.login
+                    it[displayName] = ghUser.name
+                    it[avatarUrl] = ghUser.avatarUrl
+                    it[githubToken] = body.accessToken
+                }
+                existing[UsersTable.id].value to existing[UsersTable.teamId]!!
+            } else {
+                val newTeamId = TeamsTable.insertAndGetId {
+                    it[name] = "${ghUser.login}'s team"
+                    it[createdAt] = OffsetDateTime.now()
+                }.value
+
+                val newUserId = UsersTable.insertAndGetId {
+                    it[githubId] = ghUser.id
+                    it[username] = ghUser.login
+                    it[displayName] = ghUser.name
+                    it[avatarUrl] = ghUser.avatarUrl
+                    it[githubToken] = body.accessToken
                     it[UsersTable.teamId] = newTeamId
                     it[createdAt] = OffsetDateTime.now()
                 }.value
