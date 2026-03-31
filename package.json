@@ -1,21 +1,8 @@
 {
-  "name": "orcadive",
-  "version": "1.0.0",
-  "description": "Async standup replacement for small dev teams. See what your team — humans and AI agents — is working on, get AI-suggested status updates from your GitHub activity, track open PRs, and orchestrate agent tasks — all in real time.",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "dependencies": {
+    "react": "^19.2.4"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/konradkelly/OrcaDive.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/konradkelly/OrcaDive/issues"
-  },
-  "homepage": "https://github.com/konradkelly/OrcaDive#readme"
+  "devDependencies": {
+    "@types/react": "^19.2.14"
+  }
 }
