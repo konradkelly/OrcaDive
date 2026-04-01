@@ -9,7 +9,7 @@ import {
 import { useGitHubAuth } from "../../hooks/useGitHubAuth";
 
 export default function LoginScreen() {
-  const { signIn, isLoading, error, isReady } = useGitHubAuth();
+  const { signIn, cancel, isLoading, error, userCode, isReady } = useGitHubAuth();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -19,17 +19,32 @@ export default function LoginScreen() {
           See what your team is working on, powered by GitHub.
         </Text>
 
-        <TouchableOpacity
-          style={[styles.button, (!isReady || isLoading) && styles.buttonDisabled]}
-          onPress={signIn}
-          disabled={!isReady || isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign in with GitHub</Text>
-          )}
-        </TouchableOpacity>
+        {userCode ? (
+          <View style={styles.codeContainer}>
+            <Text style={styles.codeLabel}>Enter this code on GitHub:</Text>
+            <Text selectable style={styles.codeText}>{userCode}</Text>
+            <Text style={styles.codeHint}>
+              GitHub usually opens with this code already filled. Long-press to copy if you need it.
+            </Text>
+            <ActivityIndicator color="#6366f1" style={{ marginTop: 16 }} />
+            <Text style={styles.waitingText}>Waiting for authorization...</Text>
+            <TouchableOpacity style={styles.cancelButton} onPress={cancel}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.button, (!isReady || isLoading) && styles.buttonDisabled]}
+            onPress={signIn}
+            disabled={!isReady || isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Sign in with GitHub</Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
@@ -76,6 +91,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  codeContainer: {
+    alignItems: "center",
+    gap: 8,
+  },
+  codeLabel: {
+    color: "#94a3b8",
+    fontSize: 14,
+  },
+  codeText: {
+    color: "#f8fafc",
+    fontSize: 32,
+    fontWeight: "800",
+    letterSpacing: 4,
+    paddingVertical: 12,
+  },
+  codeHint: {
+    color: "#64748b",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  waitingText: {
+    color: "#94a3b8",
+    fontSize: 13,
+  },
+  cancelButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+  },
+  cancelText: {
+    color: "#f87171",
+    fontSize: 14,
+    fontWeight: "600",
   },
   error: {
     color: "#f87171",

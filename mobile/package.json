@@ -4,8 +4,8 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios"
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@react-navigation/native": "^7.2.2",
@@ -13,6 +13,8 @@
     "axios": "^1.7.2",
     "expo": "~54.0.0",
     "expo-auth-session": "~7.0.10",
+    "expo-clipboard": "~8.0.8",
+    "expo-dev-client": "~6.0.20",
     "expo-router": "~6.0.23",
     "expo-secure-store": "~15.0.8",
     "expo-web-browser": "~15.0.10",
