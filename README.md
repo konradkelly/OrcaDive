@@ -83,8 +83,9 @@ orca-dive/
 
 Go to https://github.com/settings/developers → New OAuth App:
 
-- **Homepage URL**: `http://localhost:3000`
-- **Callback URL**: Your Expo tunnel URI (e.g. `exp://uh6zbnk-youruser-8081.exp.direct`). You can find this in the Expo logs after running `npx expo start --tunnel`.
+- **Homepage URL**: `http://localhost:3000` (or your product URL)
+- **Authorization callback URL**: Must match the redirect URI the app uses (default: `orcadive://auth` for dev builds). In **Expo Go**, the URI is often `exp://…` — check the Metro console for `[GitHub OAuth] Add this exact URL…` and register **that** URL on the OAuth app (you can add multiple callback URLs).
+- **Device authorization** is not required; sign-in uses the browser **authorization code** flow with PKCE.
 
 Save the Client ID and Client Secret — you'll need them below.
 
