@@ -89,6 +89,12 @@ Go to https://github.com/settings/developers → New OAuth App:
 
 Save the Client ID and Client Secret — you'll need them below.
 
+**“The redirect_uri is not associated with this application”** — GitHub only accepts redirect URIs you have registered. The URI your build uses is **not always** `orcadive://auth`:
+
+- Start Metro (`npx expo start` from `mobile/`) and read the line **`[GitHub OAuth] Add this exact URL…`** — copy that string.
+- In GitHub: **Settings → Developer settings → OAuth Apps → *your app*** → **Authorization callback URL** — paste that exact value. You can register **multiple** callback URLs (one per line) if you switch between **Expo Go** (`exp://…`) and a **dev/production build** (`orcadive://auth`).
+- After your LAN IP or tunnel host changes, the `exp://…` URL may change — update GitHub or use a **development build** so the scheme stays `orcadive://`.
+
 ### 2. Environment variables
 
 Create a `.env` file in the **project root**:
@@ -106,7 +112,12 @@ Create a `.env` file in `mobile/`:
 ```env
 API_URL=http://<your-pc-ip>:3000
 GITHUB_CLIENT_ID=your_client_id
+# Optional: pin OAuth redirect (must match a GitHub "Authorization callback URL" exactly).
+# If unset, Expo computes exp://… or orcadive://auth. Collaborators can paste their Metro log URI here.
+# GITHUB_REDIRECT_URI=exp://10.0.0.12:8081/--/auth
 ```
+
+Restart Metro after changing `.env` (`npx expo start -c`).
 
 ### 3. Server setup (Docker Compose — recommended)
 
