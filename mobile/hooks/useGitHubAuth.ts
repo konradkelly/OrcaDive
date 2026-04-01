@@ -10,6 +10,8 @@ import { api } from "../lib/api";
 WebBrowser.maybeCompleteAuthSession();
 
 const GITHUB_CLIENT_ID = Constants.expoConfig?.extra?.GITHUB_CLIENT_ID ?? "";
+const GITHUB_REDIRECT_URI_OVERRIDE =
+  (Constants.expoConfig?.extra?.GITHUB_REDIRECT_URI as string | undefined) ?? "";
 
 /** Must match a URL registered on the GitHub OAuth App → Authorization callback URL (e.g. orcadive://auth). */
 const githubDiscovery: DiscoveryDocument = {
@@ -23,14 +25,14 @@ export function useGitHubAuth() {
   const { setToken } = useAuthStore();
   const router = useRouter();
 
-  const redirectUri = useMemo(
-    () =>
-      AuthSession.makeRedirectUri({
-        scheme: "orcadive",
-        path: "auth",
-      }),
-    []
-  );
+  const redirectUri = useMemo(() => {
+    const fromEnv = GITHUB_REDIRECT_URI_OVERRIDE.trim();
+    if (fromEnv) return fromEnv;
+    return AuthSession.makeRedirectUri({
+      scheme: "orcadive",
+      path: "auth",
+    });
+  }, []);
 
   useEffect(() => {
     if (__DEV__) {
@@ -67,11 +69,16 @@ export function useGitHubAuth() {
       }
 
       if (result.type === "error") {
+        const errCode = result.params.error as string | undefined;
         const msg =
           (result.params.error_description as string | undefined) ||
-          (result.params.error as string | undefined) ||
+          errCode ||
           "Authorization failed";
-        setError(msg);
+        const redirectHint =
+          errCode === "redirect_uri_mismatch" || /redirect/i.test(msg)
+            ? ` Register this exact redirect URI on the GitHub OAuth app (Settings → Developer settings → your app): ${redirectUri}`
+            : "";
+        setError(`${msg}${redirectHint}`);
         return;
       }
 

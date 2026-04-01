@@ -23,6 +23,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     API_URL: process.env.API_URL ?? "http://localhost:3000",
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID ?? "",
+    /** Optional. If set, must match a GitHub OAuth "Authorization callback URL" exactly. */
+    GITHUB_REDIRECT_URI: process.env.GITHUB_REDIRECT_URI ?? "",
     eas: {
       projectId: "your-eas-project-id",
     },
