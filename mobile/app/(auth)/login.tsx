@@ -23,7 +23,9 @@ export default function LoginScreen() {
           <View style={styles.codeContainer}>
             <Text style={styles.codeLabel}>Enter this code on GitHub:</Text>
             <Text selectable style={styles.codeText}>{userCode}</Text>
-            <Text style={styles.codeHint}>Long-press code to copy. A browser was opened to github.com/login/device</Text>
+            <Text style={styles.codeHint}>
+              GitHub usually opens with this code already filled. Long-press to copy if you need it.
+            </Text>
             <ActivityIndicator color="#6366f1" style={{ marginTop: 16 }} />
             <Text style={styles.waitingText}>Waiting for authorization...</Text>
             <TouchableOpacity style={styles.cancelButton} onPress={cancel}>

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { InteractionManager } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
@@ -50,11 +51,24 @@ export function useGitHubAuth() {
         return;
       }
 
-      const { device_code, user_code, verification_uri, interval = 5 } = codeData;
+      const {
+        device_code,
+        user_code,
+        verification_uri,
+        verification_uri_complete,
+        interval = 5,
+      } = codeData;
       setUserCode(user_code);
 
-      // Open the verification page in the browser
-      WebBrowser.openBrowserAsync(verification_uri);
+      // Let React paint the code on screen before opening GitHub (avoids browser
+      // asking for a code before the app has shown it).
+      await new Promise<void>((resolve) => {
+        InteractionManager.runAfterInteractions(() => resolve());
+      });
+
+      // Prefer GitHub's URL with user_code in the query — skips manual entry on their side.
+      const verificationUrl = verification_uri_complete ?? verification_uri;
+      await WebBrowser.openBrowserAsync(verificationUrl);
 
       // Step 2: Poll for the access token
       const accessToken = await pollForToken(device_code, interval);
