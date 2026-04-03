@@ -28,7 +28,7 @@ export const useTeamStore = create<TeamStore>((set) => ({
   fetchTeam: async () => {
     set({ isLoading: true });
     try {
-      const { data } = await api.get("/team/status");
+      const { data } = await api.get("/status/team");
       set({ members: data.members, isLoading: false });
     } catch {
       set({ isLoading: false });
