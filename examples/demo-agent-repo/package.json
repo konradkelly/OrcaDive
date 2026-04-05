@@ -1,0 +1,8 @@
+{
+  "name": "orcadive-demo-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "node demo.mjs"
+  }
+}
