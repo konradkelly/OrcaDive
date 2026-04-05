@@ -2,9 +2,11 @@ package com.orcadive.controller
 
 import com.orcadive.db.AgentRunsTable
 import com.orcadive.db.AgentsTable
+import com.orcadive.db.StatusesTable
 import com.orcadive.dto.*
 import com.orcadive.security.currentAgent
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import org.springframework.http.ResponseEntity
@@ -20,6 +22,63 @@ class AgentWebhookController(
 ) {
     private val validStatuses = setOf("idle", "running", "error", "offline")
     private val validRunStatuses = setOf("running", "success", "failure")
+    private val listableRunStatuses = setOf("pending", "running", "success", "failure", "cancelled")
+
+    @GetMapping("/runs")
+    fun listRuns(
+        @RequestParam(name = "status", required = false) status: String?,
+    ): ResponseEntity<RunsResponse> {
+        val agent = currentAgent()
+        val filter = status?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it in listableRunStatuses }
+            ?.toSet()
+            ?: setOf("pending", "running")
+
+        val runs = transaction {
+            AgentRunsTable.selectAll()
+                .where {
+                    (AgentRunsTable.agentId eq agent.agentId) and
+                        (AgentRunsTable.status inList filter.toList())
+                }
+                .orderBy(AgentRunsTable.createdAt to SortOrder.DESC)
+                .limit(50)
+                .map { it.toRunDto() }
+        }
+
+        return ResponseEntity.ok(RunsResponse(runs))
+    }
+
+    @PostMapping("/standup")
+    fun postStandup(@RequestBody body: PostStatusRequest): ResponseEntity<Any> {
+        if (body.text.isBlank()) {
+            return ResponseEntity.badRequest().body(mapOf("error" to "text is required"))
+        }
+
+        val agent = currentAgent()
+
+        transaction {
+            StatusesTable.insert {
+                it[userId] = null
+                it[agentId] = EntityID(agent.agentId, AgentsTable)
+                it[teamId] = agent.teamId
+                it[text] = body.text
+                it[blockers] = body.blockers
+                it[createdAt] = OffsetDateTime.now()
+            }
+        }
+
+        messagingTemplate.convertAndSend(
+            "/topic/team.${agent.teamId}.status",
+            mapOf(
+                "agentId" to agent.agentId.toString(),
+                "status" to body.text,
+                "blockers" to body.blockers,
+            ),
+        )
+
+        return ResponseEntity.ok(OkResponse())
+    }
 
     @PostMapping("/status")
     fun reportStatus(@RequestBody body: WebhookStatusRequest): ResponseEntity<Any> {

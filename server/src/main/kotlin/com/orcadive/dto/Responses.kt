@@ -6,6 +6,8 @@ data class AuthResponse(val token: String, val userId: String, val username: Str
 // === Status ===
 data class TeamMember(
     val id: String,
+    /** `"user"` (GitHub teammate) or `"agent"` (registered AI agent). */
+    val kind: String,
     val name: String,
     val avatar: String?,
     val status: String?,
