@@ -18,18 +18,42 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS statuses (
+-- AI agents registered to a team (before statuses: agent-authored standups reference agents)
+CREATE TABLE IF NOT EXISTS agents (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES users(id),
   team_id     UUID NOT NULL REFERENCES teams(id),
-  text        TEXT NOT NULL,
-  blockers    TEXT,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'custom',
+  avatar_url  TEXT,
+  api_key_hash TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'idle',
+  last_seen   TIMESTAMPTZ,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for fast "latest status per user" queries
+CREATE INDEX IF NOT EXISTS idx_agents_team
+  ON agents(team_id);
+
+CREATE TABLE IF NOT EXISTS statuses (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES users(id),
+  agent_id    UUID REFERENCES agents(id),
+  team_id     UUID NOT NULL REFERENCES teams(id),
+  text        TEXT NOT NULL,
+  blockers    TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT statuses_user_xor_agent CHECK (
+    (user_id IS NOT NULL AND agent_id IS NULL) OR (user_id IS NULL AND agent_id IS NOT NULL)
+  )
+);
+
 CREATE INDEX IF NOT EXISTS idx_statuses_user_created
-  ON statuses(user_id, created_at DESC);
+  ON statuses(user_id, created_at DESC)
+  WHERE user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_statuses_agent_created
+  ON statuses(agent_id, created_at DESC)
+  WHERE agent_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS prs (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -37,7 +61,7 @@ CREATE TABLE IF NOT EXISTS prs (
   repo          TEXT NOT NULL,
   title         TEXT NOT NULL,
   author_id     UUID REFERENCES users(id),
-  status        TEXT NOT NULL DEFAULT 'open',  -- open, draft, review_requested, merged
+  status        TEXT NOT NULL DEFAULT 'open',
   url           TEXT NOT NULL,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
@@ -49,35 +73,18 @@ CREATE INDEX IF NOT EXISTS idx_prs_author_status
 CREATE TABLE IF NOT EXISTS team_repos (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   team_id         UUID NOT NULL REFERENCES teams(id),
-  repo_full_name  TEXT NOT NULL,     -- e.g. "konrad/cascadia-gear"
+  repo_full_name  TEXT NOT NULL,
   added_at        TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(team_id, repo_full_name)
 );
 
--- AI agents registered to a team
-CREATE TABLE IF NOT EXISTS agents (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  team_id     UUID NOT NULL REFERENCES teams(id),
-  name        TEXT NOT NULL,                    -- e.g. "Copilot Coding Agent"
-  type        TEXT NOT NULL DEFAULT 'custom',   -- custom, copilot, ci
-  avatar_url  TEXT,
-  api_key_hash TEXT NOT NULL,                   -- SHA-256 of the agent's API key
-  status      TEXT NOT NULL DEFAULT 'idle',     -- idle, running, error, offline
-  last_seen   TIMESTAMPTZ,
-  created_at  TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_agents_team
-  ON agents(team_id);
-
--- Agent run history (tasks assigned or self-reported)
 CREATE TABLE IF NOT EXISTS agent_runs (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id    UUID NOT NULL REFERENCES agents(id),
   team_id     UUID NOT NULL REFERENCES teams(id),
-  task        TEXT NOT NULL,                     -- "Run linter on PR #47"
-  status      TEXT NOT NULL DEFAULT 'pending',   -- pending, running, success, failure, cancelled
-  output      TEXT,                              -- summary or log output
+  task        TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  output      TEXT,
   started_at  TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   created_at  TIMESTAMPTZ DEFAULT NOW()
@@ -86,9 +93,9 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 CREATE INDEX IF NOT EXISTS idx_agent_runs_agent
   ON agent_runs(agent_id, created_at DESC);
 
--- Convenience view: latest status per user
 CREATE OR REPLACE VIEW latest_statuses AS
   SELECT DISTINCT ON (user_id)
     user_id, team_id, text, blockers, created_at
   FROM statuses
+  WHERE user_id IS NOT NULL
   ORDER BY user_id, created_at DESC;

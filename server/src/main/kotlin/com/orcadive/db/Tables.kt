@@ -19,15 +19,35 @@ object UsersTable : UUIDTable("users") {
     val createdAt = timestampWithTimeZone("created_at").nullable()
 }
 
+object AgentsTable : UUIDTable("agents") {
+    val teamId = uuid("team_id").references(TeamsTable.id)
+    val name = text("name")
+    val type = text("type").default("custom")
+    val avatarUrl = text("avatar_url").nullable()
+    val apiKeyHash = text("api_key_hash")
+    val status = text("status").default("idle")
+    val lastSeen = timestampWithTimeZone("last_seen").nullable()
+    val createdAt = timestampWithTimeZone("created_at").nullable()
+
+    init {
+        index(false, teamId)
+    }
+}
+
 object StatusesTable : UUIDTable("statuses") {
-    val userId = uuid("user_id").references(UsersTable.id)
+    val userId = optReference("user_id", UsersTable)
+    val agentId = optReference("agent_id", AgentsTable)
     val teamId = uuid("team_id").references(TeamsTable.id)
     val text = text("text")
     val blockers = text("blockers").nullable()
     val createdAt = timestampWithTimeZone("created_at").nullable()
 
     init {
+        check("statuses_user_xor_agent") {
+            (userId.isNotNull() and agentId.isNull()) or (userId.isNull() and agentId.isNotNull())
+        }
         index(false, userId, createdAt)
+        index(false, agentId, createdAt)
     }
 }
 
@@ -53,21 +73,6 @@ object TeamReposTable : UUIDTable("team_repos") {
 
     init {
         uniqueIndex(teamId, repoFullName)
-    }
-}
-
-object AgentsTable : UUIDTable("agents") {
-    val teamId = uuid("team_id").references(TeamsTable.id)
-    val name = text("name")
-    val type = text("type").default("custom")
-    val avatarUrl = text("avatar_url").nullable()
-    val apiKeyHash = text("api_key_hash")
-    val status = text("status").default("idle")
-    val lastSeen = timestampWithTimeZone("last_seen").nullable()
-    val createdAt = timestampWithTimeZone("created_at").nullable()
-
-    init {
-        index(false, teamId)
     }
 }
 
