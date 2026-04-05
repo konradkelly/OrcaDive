@@ -231,7 +231,7 @@ For Android: scan with the Expo Go app.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST` | `/api/auth/github` | No | Exchange GitHub OAuth code for JWT |
-| `GET` | `/api/status/team` | JWT | Fetch all current team statuses |
+| `GET` | `/api/status/team` | JWT | Fetch all teammates + agents (Radar: `kind` field `user` or `agent`) |
 | `POST` | `/api/status` | JWT | Post my status update |
 | `GET` | `/api/team/prs` | JWT | Fetch open PRs across team repos |
 | `POST` | `/api/team/repos` | JWT | Add a repo to track |
@@ -244,9 +244,11 @@ For Android: scan with the Expo Go app.
 | `POST` | `/api/agents/:agentId/runs/:runId/cancel` | JWT | Cancel a pending/running task |
 | `POST` | `/api/agents/webhook/status` | API Key | Agent self-reports its status |
 | `POST` | `/api/agents/webhook/run` | API Key | Agent reports run progress/completion |
+| `GET` | `/api/agents/webhook/runs` | API Key | List runs for this agent (`?status=pending,running`, optional) |
+| `POST` | `/api/agents/webhook/standup` | API Key | Post a standup (same shape as `/api/status`) — appears on Radar |
 
 STOMP WebSocket destinations (subscribe via `/topic/team.{teamId}.*`):
-- `/topic/team.{teamId}.status` — when a member posts a status update
+- `/topic/team.{teamId}.status` — when a member or agent posts a standup (`memberId` or `agentId` in payload)
 - `/topic/team.{teamId}.agent.status` — when an agent's status changes
 - `/topic/team.{teamId}.agent.run.created` — when a task is assigned to an agent
 - `/topic/team.{teamId}.agent.run.updated` — when an agent run changes state
@@ -278,7 +280,7 @@ Tables defined in `server/src/main/resources/schema.sql` (Exposed ORM mappings i
 
 - **teams** — team groups
 - **users** — GitHub-authenticated users, linked to a team
-- **statuses** — status updates (one per post, latest queried via `LATERAL`)
+- **statuses** — standups per **user** or **agent** (`user_id` XOR `agent_id`); see `migrations/V001_statuses_agent_standups.sql` for existing DBs
 - **prs** — cached PR records with author linkage (used for `openPRs` count)
 - **team_repos** — repos a team is tracking for PR polling
 - **agents** — AI agents registered to a team (name, type, api_key_hash, status, last_seen)
@@ -297,13 +299,17 @@ Authorization: Bearer agent:<api-key>
 
 The API key is returned **once** when you register an agent via `POST /api/agents` (JWT-authenticated). The server stores only a SHA-256 hash — the plaintext key cannot be retrieved again.
 
-Agent types: `custom`, `copilot`, `ci_bot`
+Agent types: `custom`, `copilot`, `ci`
 
 Agent statuses: `idle`, `running`, `error`, `offline`
 
 Run statuses: `pending`, `running`, `success`, `failure`, `cancelled`
 
 ---
+
+## Demo external agent
+
+See [`examples/demo-agent-repo/README.md`](examples/demo-agent-repo/README.md) for a Node script that polls for tasks, completes runs, and posts standups using the agent API key.
 
 ## Phase 2 ideas
 
@@ -313,5 +319,4 @@ Run statuses: `pending`, `running`, `success`, `failure`, `cancelled`
 - Team invite links (replace manual DB assignment)
 - GitHub webhook for real-time PR status updates (vs polling)
 - MMKV offline caching layer for mobile
-- Agent registration UI in Settings screen
 - Agent run log streaming via WebSocket
