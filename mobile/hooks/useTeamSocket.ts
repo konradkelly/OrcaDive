@@ -26,20 +26,24 @@ export function useTeamSocket() {
       connectHeaders: { token },
       reconnectDelay: 5000,
       onConnect: () => {
-        // Decode the JWT to read teamId (payload is the second base64 segment)
         const payload = JSON.parse(atob(token.split(".")[1]));
         const teamId = payload.teamId;
 
-        // A team member posted a new status — update their card live
-        client.subscribe(
-          `/topic/team.${teamId}.status`,
-          (msg: IMessage) => {
-            const { memberId, status, blockers } = JSON.parse(msg.body);
-            updateMemberStatus(memberId, status, blockers);
-          },
-        );
+        client.subscribe(`/topic/team.${teamId}.status`, (msg: IMessage) => {
+          const body = JSON.parse(msg.body) as {
+            memberId?: string;
+            agentId?: string;
+            status: string;
+            blockers: string | null;
+          };
+          updateMemberStatus({
+            memberId: body.memberId,
+            agentId: body.agentId,
+            status: body.status,
+            blockers: body.blockers ?? null,
+          });
+        });
 
-        // Agent status changed
         client.subscribe(
           `/topic/team.${teamId}.agent.status`,
           (msg: IMessage) => {
@@ -48,7 +52,6 @@ export function useTeamSocket() {
           },
         );
 
-        // New agent run created
         client.subscribe(
           `/topic/team.${teamId}.agent.run.created`,
           (msg: IMessage) => {
@@ -57,7 +60,6 @@ export function useTeamSocket() {
           },
         );
 
-        // Agent run updated (progress, completion)
         client.subscribe(
           `/topic/team.${teamId}.agent.run.updated`,
           (msg: IMessage) => {

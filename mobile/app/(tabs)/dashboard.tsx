@@ -11,13 +11,11 @@ import { useTeamStore } from "../../store/teamStore";
 import { useAgentStore } from "../../store/agentStore";
 import { useTeamSocket } from "../../hooks/useTeamSocket";
 import { TeamMemberCard } from "../../components/TeamMemberCard";
-import { AgentCard } from "../../components/AgentCard";
 
 export default function DashboardScreen() {
   const { members, isLoading, fetchTeam } = useTeamStore();
   const { agents, fetchAgents } = useAgentStore();
 
-  // Connect to WebSocket for real-time updates
   useTeamSocket();
 
   useEffect(() => {
@@ -33,7 +31,8 @@ export default function DashboardScreen() {
         <Text style={styles.title}>OrcaDive</Text>
         <Text style={styles.subtitle}>
           {members.filter((m) => m.updatedToday).length}/{members.length} updated today
-          {activeAgents.length > 0 && ` · ${activeAgents.length} agent${activeAgents.length > 1 ? "s" : ""}`}
+          {activeAgents.length > 0 &&
+            ` · ${activeAgents.length} online agent${activeAgents.length > 1 ? "s" : ""}`}
         </Text>
       </View>
 
@@ -42,20 +41,10 @@ export default function DashboardScreen() {
       ) : (
         <FlatList
           data={members}
-          keyExtractor={(m) => m.id}
+          keyExtractor={(m) => `${m.kind}-${m.id}`}
           renderItem={({ item }) => <TeamMemberCard member={item} />}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={
-            activeAgents.length > 0 ? (
-              <View style={styles.agentSection}>
-                <Text style={styles.sectionLabel}>Agents</Text>
-                {activeAgents.map((a) => (
-                  <AgentCard key={a.id} agent={a} compact />
-                ))}
-              </View>
-            ) : null
-          }
         />
       )}
     </SafeAreaView>
@@ -87,17 +76,5 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
     gap: 12,
-  },
-  agentSection: {
-    marginTop: 16,
-    gap: 8,
-  },
-  sectionLabel: {
-    color: "#64748b",
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
   },
 });

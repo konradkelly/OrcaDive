@@ -2,9 +2,10 @@ import { View, Text, StyleSheet } from "react-native";
 
 type Member = {
   id: string;
+  kind: "user" | "agent";
   name: string;
-  avatar: string;
-  status: string;
+  avatar: string | null;
+  status: string | null;
   blockers: string | null;
   updatedToday: boolean;
   updatedAt: string;
@@ -26,27 +27,31 @@ export function TeamMemberCard({ member }: Props) {
 
   return (
     <View style={styles.card}>
-      {/* Header row */}
       <View style={styles.header}>
         <View style={styles.nameRow}>
           <View style={[styles.dot, { backgroundColor: freshness.color }]} />
           <Text style={styles.name}>{member.name}</Text>
+          {member.kind === "agent" && (
+            <View style={styles.agentBadge}>
+              <Text style={styles.agentBadgeText}>Agent</Text>
+            </View>
+          )}
         </View>
-        {member.openPRs > 0 && (
+        {member.kind === "user" && member.openPRs > 0 && (
           <View style={styles.prBadge}>
-            <Text style={styles.prBadgeText}>{member.openPRs} PR{member.openPRs > 1 ? "s" : ""}</Text>
+            <Text style={styles.prBadgeText}>
+              {member.openPRs} PR{member.openPRs > 1 ? "s" : ""}
+            </Text>
           </View>
         )}
       </View>
 
-      {/* Status text */}
       <Text style={styles.status}>
         {member.status || (
           <Text style={styles.noStatus}>No update yet</Text>
         )}
       </Text>
 
-      {/* Blockers */}
       {member.blockers && (
         <View style={styles.blockerRow}>
           <Text style={styles.blockerLabel}>Blocked: </Text>
@@ -54,7 +59,6 @@ export function TeamMemberCard({ member }: Props) {
         </View>
       )}
 
-      {/* Footer */}
       <Text style={styles.timestamp}>{freshness.label}</Text>
     </View>
   );
@@ -74,9 +78,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   name: { color: "#f8fafc", fontSize: 15, fontWeight: "600" },
+  agentBadge: {
+    backgroundColor: "#312e81",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "#4338ca",
+  },
+  agentBadgeText: { color: "#a5b4fc", fontSize: 10, fontWeight: "700" },
   prBadge: {
     backgroundColor: "#1e1b4b",
     borderRadius: 99,

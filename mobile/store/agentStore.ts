@@ -27,6 +27,7 @@ type AgentStore = {
   isLoading: boolean;
 
   fetchAgents: () => Promise<void>;
+  createAgent: (name: string, type: Agent["type"]) => Promise<string>;
   fetchRuns: (agentId: string) => Promise<void>;
   assignTask: (agentId: string, task: string) => Promise<void>;
   cancelRun: (agentId: string, runId: string) => Promise<void>;
@@ -50,6 +51,15 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     } catch {
       set({ isLoading: false });
     }
+  },
+
+  createAgent: async (name, type) => {
+    const { data } = await api.post("/agents", { name, type });
+    const agent = data.agent as Agent;
+    set((state) => ({
+      agents: [agent, ...state.agents.filter((a) => a.id !== agent.id)],
+    }));
+    return data.apiKey as string;
   },
 
   fetchRuns: async (agentId) => {

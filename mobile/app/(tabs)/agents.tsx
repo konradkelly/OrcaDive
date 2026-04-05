@@ -9,8 +9,12 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Modal,
+  ScrollView,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useAgentStore } from "../../store/agentStore";
+import { useTeamStore } from "../../store/teamStore";
 import { AgentCard } from "../../components/AgentCard";
 
 type AgentRun = {
@@ -31,11 +35,32 @@ const RUN_STATUS_COLOR: Record<string, string> = {
   cancelled: "#475569",
 };
 
+const AGENT_TYPES = ["custom", "copilot", "ci"] as const;
+
 export default function AgentsScreen() {
-  const { agents, runs, isLoading, fetchAgents, fetchRuns, assignTask, cancelRun } =
-    useAgentStore();
+  const {
+    agents,
+    runs,
+    isLoading,
+    fetchAgents,
+    createAgent,
+    fetchRuns,
+    assignTask,
+    cancelRun,
+  } = useAgentStore();
+  const fetchTeam = useTeamStore((s) => s.fetchTeam);
+
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [taskInput, setTaskInput] = useState("");
+
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerName, setRegisterName] = useState("");
+  const [registerType, setRegisterType] =
+    useState<(typeof AGENT_TYPES)[number]>("custom");
+  const [registerSubmitting, setRegisterSubmitting] = useState(false);
+
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
+  const [newApiKey, setNewApiKey] = useState("");
 
   useEffect(() => {
     fetchAgents();
@@ -72,7 +97,33 @@ export default function AgentsScreen() {
     ]);
   };
 
-  // Agent detail view
+  const handleRegisterAgent = async () => {
+    const name = registerName.trim();
+    if (!name) {
+      Alert.alert("Name required", "Enter a name for the agent.");
+      return;
+    }
+    setRegisterSubmitting(true);
+    try {
+      const apiKey = await createAgent(name, registerType);
+      setRegisterOpen(false);
+      setRegisterName("");
+      setRegisterType("custom");
+      setNewApiKey(apiKey);
+      setKeyModalOpen(true);
+      await fetchTeam();
+    } catch {
+      Alert.alert("Error", "Could not register agent.");
+    } finally {
+      setRegisterSubmitting(false);
+    }
+  };
+
+  const copyKey = async () => {
+    await Clipboard.setStringAsync(newApiKey);
+    Alert.alert("Copied", "API key copied to clipboard.");
+  };
+
   if (selectedAgent) {
     return (
       <SafeAreaView style={styles.container}>
@@ -83,7 +134,6 @@ export default function AgentsScreen() {
           <Text style={styles.title}>{selectedAgent.name}</Text>
         </View>
 
-        {/* Task assignment */}
         <View style={styles.assignRow}>
           <TextInput
             style={styles.taskInput}
@@ -101,7 +151,6 @@ export default function AgentsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Run history */}
         <FlatList
           data={agentRuns}
           keyExtractor={(r) => r.id}
@@ -143,7 +192,6 @@ export default function AgentsScreen() {
     );
   }
 
-  // Agent list view
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -151,6 +199,12 @@ export default function AgentsScreen() {
         <Text style={styles.subtitle}>
           {agents.filter((a) => a.status === "running").length} running
         </Text>
+        <TouchableOpacity
+          style={styles.registerBtn}
+          onPress={() => setRegisterOpen(true)}
+        >
+          <Text style={styles.registerBtnText}>Register agent</Text>
+        </TouchableOpacity>
       </View>
 
       {isLoading ? (
@@ -168,11 +222,109 @@ export default function AgentsScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <Text style={styles.emptyText}>
-              No agents registered yet. Add one from Settings.
+              No agents yet. Tap Register agent to add one and get an API key.
             </Text>
           }
         />
       )}
+
+      <Modal
+        visible={registerOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setRegisterOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Register agent</Text>
+            <Text style={styles.modalHint}>
+              You will receive an API key once. Store it for your agent process.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Agent name"
+              placeholderTextColor="#64748b"
+              value={registerName}
+              onChangeText={setRegisterName}
+            />
+            <Text style={styles.typeLabel}>Type</Text>
+            <View style={styles.typeRow}>
+              {AGENT_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[
+                    styles.typeChip,
+                    registerType === t && styles.typeChipActive,
+                  ]}
+                  onPress={() => setRegisterType(t)}
+                >
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      registerType === t && styles.typeChipTextActive,
+                    ]}
+                  >
+                    {t}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setRegisterOpen(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalOk,
+                  registerSubmitting && styles.assignButtonDisabled,
+                ]}
+                onPress={handleRegisterAgent}
+                disabled={registerSubmitting}
+              >
+                <Text style={styles.modalOkText}>
+                  {registerSubmitting ? "…" : "Create"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={keyModalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setKeyModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Save your API key</Text>
+            <Text style={styles.modalHint}>
+              This key is shown only once. Use it as{" "}
+              <Text style={styles.monoHint}>Authorization: Bearer {"<key>"}</Text>
+            </Text>
+            <ScrollView style={styles.keyScroll}>
+              <Text selectable style={styles.keyText}>
+                {newApiKey}
+              </Text>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={copyKey}>
+                <Text style={styles.modalCancelText}>Copy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalOk}
+                onPress={() => setKeyModalOpen(false)}
+              >
+                <Text style={styles.modalOkText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -185,9 +337,21 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#1e293b",
+    gap: 8,
   },
   title: { fontSize: 24, fontWeight: "700", color: "#f8fafc" },
   subtitle: { fontSize: 13, color: "#64748b", marginTop: 2 },
+  registerBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: "#312e81",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#4338ca",
+    marginTop: 4,
+  },
+  registerBtnText: { color: "#a5b4fc", fontWeight: "700", fontSize: 14 },
   backButton: { color: "#6366f1", fontSize: 14, fontWeight: "600", marginBottom: 8 },
   list: { padding: 16, gap: 10 },
   assignRow: {
@@ -232,4 +396,63 @@ const styles = StyleSheet.create({
   runOutput: { color: "#94a3b8", fontSize: 12, lineHeight: 18 },
   cancelText: { color: "#f87171", fontSize: 12, fontWeight: "600", marginTop: 4 },
   emptyText: { color: "#475569", fontSize: 14, textAlign: "center", marginTop: 40 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#334155",
+    maxHeight: "90%",
+  },
+  modalTitle: { color: "#f8fafc", fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  modalHint: { color: "#94a3b8", fontSize: 13, lineHeight: 20, marginBottom: 12 },
+  monoHint: { color: "#cbd5e1", fontFamily: "monospace" },
+  modalInput: {
+    backgroundColor: "#0f172a",
+    borderRadius: 10,
+    padding: 12,
+    color: "#f8fafc",
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: "#334155",
+    marginBottom: 12,
+  },
+  typeLabel: { color: "#64748b", fontSize: 12, fontWeight: "600", marginBottom: 8 },
+  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+  typeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  typeChipActive: {
+    borderColor: "#6366f1",
+    backgroundColor: "#1e1b4b",
+  },
+  typeChipText: { color: "#94a3b8", fontSize: 13, fontWeight: "600" },
+  typeChipTextActive: { color: "#a5b4fc" },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12 },
+  modalCancel: { paddingVertical: 10, paddingHorizontal: 14 },
+  modalCancelText: { color: "#94a3b8", fontWeight: "600" },
+  modalOk: {
+    backgroundColor: "#6366f1",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  modalOkText: { color: "#fff", fontWeight: "700" },
+  keyScroll: { maxHeight: 120, marginBottom: 12 },
+  keyText: {
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontFamily: "monospace",
+  },
 });

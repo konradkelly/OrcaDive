@@ -3,9 +3,10 @@ import { api } from "../lib/api";
 
 type Member = {
   id: string;
+  kind: "user" | "agent";
   name: string;
-  avatar: string;
-  status: string;
+  avatar: string | null;
+  status: string | null;
   blockers: string | null;
   updatedToday: boolean;
   updatedAt: string;
@@ -17,7 +18,12 @@ type TeamStore = {
   myLastStatus: string | null;
   isLoading: boolean;
   fetchTeam: () => Promise<void>;
-  updateMemberStatus: (memberId: string, status: string, blockers: string | null) => void;
+  updateMemberStatus: (payload: {
+    memberId?: string;
+    agentId?: string;
+    status: string;
+    blockers: string | null;
+  }) => void;
 };
 
 export const useTeamStore = create<TeamStore>((set) => ({
@@ -35,12 +41,21 @@ export const useTeamStore = create<TeamStore>((set) => ({
     }
   },
 
-  // Called by the WebSocket hook when a live update arrives
-  updateMemberStatus: (memberId, status, blockers) => {
+  updateMemberStatus: ({ memberId, agentId, status, blockers }) => {
+    const targetKind = memberId ? "user" : "agent";
+    const id = memberId ?? agentId;
+    if (!id) return;
+
     set((state) => ({
       members: state.members.map((m) =>
-        m.id === memberId
-          ? { ...m, status, blockers, updatedToday: true, updatedAt: new Date().toISOString() }
+        m.id === id && m.kind === targetKind
+          ? {
+              ...m,
+              status,
+              blockers,
+              updatedToday: true,
+              updatedAt: new Date().toISOString(),
+            }
           : m
       ),
     }));
