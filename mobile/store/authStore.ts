@@ -28,8 +28,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   signOut: async () => {
-    await SecureStore.deleteItemAsync("jwt");
-    await SecureStore.deleteItemAsync("userId");
+    await Promise.allSettled([
+      SecureStore.deleteItemAsync("jwt"),
+      SecureStore.deleteItemAsync("userId"),
+    ]);
     set({ token: null, userId: null });
   },
 }));
