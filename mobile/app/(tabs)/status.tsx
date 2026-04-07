@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useStatusSuggestion } from "../../hooks/useStatusSuggestion";
 import { useTeamStore } from "../../store/teamStore";
+import { useAuthStore } from "../../store/authStore";
 import { api } from "../../lib/api";
 
 export default function StatusScreen() {
@@ -18,7 +19,8 @@ export default function StatusScreen() {
   const [blockers, setBlockers] = useState("");
   const [isPosting, setIsPosting] = useState(false);
   const { suggestion, isLoadingSuggestion, fetchSuggestion } = useStatusSuggestion();
-  const { myLastStatus } = useTeamStore();
+  const { myLastStatus, updateMemberStatus } = useTeamStore();
+  const { userId } = useAuthStore();
 
   // Pre-fill with AI suggestion when it arrives
   useEffect(() => {
@@ -36,10 +38,17 @@ export default function StatusScreen() {
     if (!statusText.trim()) return;
     setIsPosting(true);
     try {
+      const trimmedText = statusText.trim();
+      const trimmedBlockers = blockers.trim() || null;
       await api.post("/status", {
-        text: statusText.trim(),
-        blockers: blockers.trim() || null,
+        text: trimmedText,
+        blockers: trimmedBlockers,
       });
+      if (userId) {
+        updateMemberStatus({ memberId: userId, status: trimmedText, blockers: trimmedBlockers });
+      }
+      setStatusText("");
+      setBlockers("");
       Alert.alert("Posted!", "Your team can see your update.");
     } catch {
       Alert.alert("Error", "Failed to post status. Try again.");

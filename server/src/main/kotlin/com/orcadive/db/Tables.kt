@@ -2,6 +2,8 @@ package com.orcadive.db
 
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 
 object TeamsTable : UUIDTable("teams") {

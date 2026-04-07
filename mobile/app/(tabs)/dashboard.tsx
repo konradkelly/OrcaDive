@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { useTeamStore } from "../../store/teamStore";
 import { useAgentStore } from "../../store/agentStore";
 import { useTeamSocket } from "../../hooks/useTeamSocket";
@@ -18,10 +19,12 @@ export default function DashboardScreen() {
 
   useTeamSocket();
 
-  useEffect(() => {
-    fetchTeam();
-    fetchAgents();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchTeam();
+      fetchAgents();
+    }, [])
+  );
 
   const activeAgents = agents.filter((a) => a.status !== "offline");
 
