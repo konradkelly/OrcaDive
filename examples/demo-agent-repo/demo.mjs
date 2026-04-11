@@ -9,16 +9,62 @@
  *   ANTHROPIC_MODEL    — optional; default matches server (ClaudeService)
  *   WORKING_SUMMARY    — optional; one line about your local repo/path (included in the prompt)
  *   REPO_ROOT          — optional; absolute path to a local repo (e.g. coffeefarm). If set, reads prompt.md from that root.
+ *                      On startup, unset keys are also filled from ../../.env (repo-root .env next to server/mobile).
  *   PROMPT_FILE        — optional; file under REPO_ROOT (default: prompt.md)
+ *   IMPLEMENT_ENABLE   — optional; default true. Set false or 0 to skip Claude tool implementation (mock run completion only).
+ *   MAX_TOOL_ROUNDS    — optional; max assistant/tool cycles per run (default 20, max 100).
+ *   DEMO_POLL_INTERVAL_MS — optional; if set to a positive number, keep polling in a loop every
+ *                          N ms until Ctrl+C. Standup is posted only after a cycle that processed
+ *                          at least one run (idle cycles do not spam Radar). One-shot (unset/0)
+ *                          still posts a standup every run, including when there were no tasks.
  *
  * Usage:
  *   API_BASE_URL=http://localhost:3000 AGENT_API_KEY='agent:...' ANTHROPIC_API_KEY='...' REPO_ROOT=C:/Users/you/coffeefarm node demo.mjs
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { runImplementationWithTools } from "./utils/anthropicToolRunner.mjs";
 import { normalizeRepoRootForNode } from "./utils/pathUtils.mjs";
+import { resolveRepoRootAbs } from "./utils/repoSandbox.mjs";
 import { truncateWithNotice } from "./utils/truncateText.mjs";
+
+/**
+ * Loads `orcadive/.env` into process.env for keys that are still unset/empty,
+ * so REPO_ROOT / API keys in the repo root file apply when running from examples/demo-agent-repo.
+ */
+function loadOrcadiveRootEnvIfUnset() {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const rootEnv = path.resolve(here, "..", "..", ".env");
+    if (!existsSync(rootEnv)) return;
+    const raw = readFileSync(rootEnv, "utf8");
+    for (const line of raw.split("\n")) {
+      let t = line.trim().replace(/^\ufeff/, "");
+      if (!t || t.startsWith("#")) continue;
+      if (t.startsWith("export ")) t = t.slice(7).trim();
+      const eq = t.indexOf("=");
+      if (eq <= 0) continue;
+      const key = t.slice(0, eq).trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      if (process.env[key]) continue;
+      let val = t.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      process.env[key] = val;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+loadOrcadiveRootEnvIfUnset();
 
 const base = (process.env.API_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const rawKey = process.env.AGENT_API_KEY;
@@ -28,6 +74,21 @@ const anthropicModel =
 const workingSummary = (process.env.WORKING_SUMMARY ?? "").trim();
 const repoRootRaw = (process.env.REPO_ROOT ?? "").trim();
 const promptFileName = (process.env.PROMPT_FILE ?? "prompt.md").trim() || "prompt.md";
+
+const implementEnable = !/^false|0$/i.test(
+  String(process.env.IMPLEMENT_ENABLE ?? "").trim(),
+);
+const rawMaxRounds = parseInt(process.env.MAX_TOOL_ROUNDS ?? "20", 10);
+const maxToolRounds =
+  Number.isFinite(rawMaxRounds) && rawMaxRounds > 0
+    ? Math.min(rawMaxRounds, 100)
+    : 20;
+
+const rawWatchMs = parseInt(process.env.DEMO_POLL_INTERVAL_MS ?? "0", 10);
+const watchPollMs =
+  Number.isFinite(rawWatchMs) && rawWatchMs > 0
+    ? Math.min(rawWatchMs, 3_600_000)
+    : 0;
 
 /** Cap how much of prompt.md is sent to Claude (approx. cost / context). */
 const MAX_PROMPT_MD_CHARS = 24_000;
@@ -131,7 +192,7 @@ async function generateStandupWithClaude({ runNotes, hadRuns, promptMd }) {
     );
   }
   if (hadRuns && runNotes.length) {
-    lines.push("Tasks processed this run:");
+    lines.push("Tasks processed this run (includes any files written under REPO_ROOT):");
     runNotes.forEach((n, i) => lines.push(`${i + 1}. ${n}`));
   } else {
     lines.push("No pending or running OrcaDive tasks were picked up this run.");
@@ -196,11 +257,27 @@ function fallbackStandup({ runNotes, hadRuns, promptMd }) {
   return parts.join(" — ");
 }
 
-async function main() {
-  console.log("OrcaDive demo agent — polling for runs…");
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * One poll + optional task execution + optional standup.
+ * @param {{ watchMode: boolean; logBanner: boolean }} opts
+ * @returns {Promise<boolean>} true if at least one run was processed this cycle
+ */
+async function runCycle(opts) {
+  const { watchMode, logBanner } = opts;
+  if (logBanner) {
+    console.log("OrcaDive demo agent — polling for runs…");
+  }
 
   const promptMd = await loadPromptFromRepo(repoRootRaw, promptFileName);
-  if (repoRootRaw) {
+  const repoAbs = resolveRepoRootAbs(repoRootRaw);
+  const useImplement =
+    Boolean(repoAbs) && implementEnable && Boolean(anthropicKey);
+
+  if (logBanner && repoRootRaw) {
     if (promptMd.content) {
       console.log(`Loaded ${promptFileName} from ${promptMd.displayPath}`);
     } else {
@@ -209,6 +286,11 @@ async function main() {
       );
     }
   }
+  if (logBanner && repoAbs && implementEnable && !anthropicKey) {
+    console.warn(
+      "REPO_ROOT set but ANTHROPIC_API_KEY missing — skipping Claude tool implementation; using mock run completion.",
+    );
+  }
 
   const runNotes = [];
   let hadRuns = false;
@@ -216,44 +298,125 @@ async function main() {
   const runsData = await pollRuns();
   const runs = runsData.runs ?? [];
   if (runs.length === 0) {
-    console.log("No pending/running tasks. Assign one from the mobile Agents tab, then re-run.");
+    if (!watchMode) {
+      console.log(
+        "No pending/running tasks. Assign one from the mobile Agents tab, then re-run.",
+      );
+    }
   } else {
     for (const run of runs) {
       if (run.status !== "pending" && run.status !== "running") continue;
       hadRuns = true;
       console.log(`Run ${run.id}: ${run.task}`);
-      await reportRun(run.id, "running", "Working on mock repo…");
-      const outputParts = [
-        "Mock work complete (see examples/demo-agent-repo/README.md).",
-      ];
-      if (promptMd.content) {
-        outputParts.push(
-          `Loaded ${promptFileName} (${promptMd.content.length} chars from disk).`,
-        );
-      } else if (repoRootRaw && promptMd?.error) {
-        outputParts.push(
-          `Could not load ${promptFileName}: ${promptMd.error}`,
-        );
+
+      if (useImplement) {
+        await reportRun(run.id, "running", "Implementing with Claude tools under REPO_ROOT…");
+        try {
+          const impl = await runImplementationWithTools({
+            apiKey: anthropicKey,
+            model: anthropicModel,
+            repoRootAbs: repoAbs,
+            taskText: run.task,
+            promptMdContent: promptMd.content ?? null,
+            maxRounds: maxToolRounds,
+          });
+          if (impl.ok) {
+            const summary =
+              impl.summaryText.length > 1_800
+                ? `${impl.summaryText.slice(0, 1_800)}…`
+                : impl.summaryText;
+            const filesPart =
+              impl.touchedFiles.length > 0
+                ? `Files touched: ${impl.touchedFiles.join(", ")}`
+                : "No files written.";
+            const output = `${summary} | ${filesPart}`;
+            await reportRun(run.id, "success", output);
+            runNotes.push(`Task: ${run.task}. Result: ${output}`);
+          } else {
+            const partial =
+              impl.touchedFiles.length > 0
+                ? ` | Partial files: ${impl.touchedFiles.join(", ")}`
+                : "";
+            const failMsg = `${impl.error}${impl.summaryText ? ` | ${impl.summaryText.slice(0, 400)}` : ""}${partial}`;
+            await reportRun(run.id, "failure", failMsg);
+            runNotes.push(`Task: ${run.task}. FAILED: ${failMsg}`);
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await reportRun(run.id, "failure", msg);
+          runNotes.push(`Task: ${run.task}. FAILED: ${msg}`);
+        }
+      } else {
+        if (anthropicKey) {
+          if (!repoAbs) {
+            console.warn(
+              "[demo] REPO_ROOT is not set or did not resolve — Claude standups still run, but tasks use mock mode (no files written). Add REPO_ROOT to orcadive/.env or export it.",
+            );
+          } else if (!implementEnable) {
+            console.warn(
+              "[demo] IMPLEMENT_ENABLE is off — mock task completion only (no write_file).",
+            );
+          }
+        }
+        await reportRun(run.id, "running", "Working on mock repo…");
+        const outputParts = [
+          "Mock work complete (see examples/demo-agent-repo/README.md).",
+        ];
+        if (promptMd.content) {
+          outputParts.push(
+            `Loaded ${promptFileName} (${promptMd.content.length} chars from disk).`,
+          );
+        } else if (repoRootRaw && promptMd?.error) {
+          outputParts.push(
+            `Could not load ${promptFileName}: ${promptMd.error}`,
+          );
+        }
+        const output = outputParts.join(" ");
+        await reportRun(run.id, "success", output);
+        runNotes.push(`Task: ${run.task}. Result: ${output}`);
       }
-      const output = outputParts.join(" ");
-      await reportRun(run.id, "success", output);
-      runNotes.push(`Task: ${run.task}. Result: ${output}`);
     }
   }
 
-  let standup;
-  if (anthropicKey) {
-    console.log("Drafting standup with Claude…");
-    standup = await generateStandupWithClaude({ runNotes, hadRuns, promptMd });
-  } else {
-    console.warn(
-      "ANTHROPIC_API_KEY not set — posting a template standup. Set the key to use Claude.",
-    );
-    standup = fallbackStandup({ runNotes, hadRuns, promptMd });
+  const postStandupThisCycle = hadRuns || !watchMode;
+  if (postStandupThisCycle) {
+    let standup;
+    if (anthropicKey) {
+      console.log("Drafting standup with Claude…");
+      standup = await generateStandupWithClaude({ runNotes, hadRuns, promptMd });
+    } else {
+      if (!watchMode || hadRuns) {
+        console.warn(
+          "ANTHROPIC_API_KEY not set — posting a template standup. Set the key to use Claude.",
+        );
+      }
+      standup = fallbackStandup({ runNotes, hadRuns, promptMd });
+    }
+
+    await postStandup(standup, null);
+    console.log("Posted standup to team Radar.");
   }
 
-  await postStandup(standup, null);
-  console.log("Posted standup to team Radar.");
+  return hadRuns;
+}
+
+async function main() {
+  if (watchPollMs > 0) {
+    console.log(
+      `Watch mode: DEMO_POLL_INTERVAL_MS=${watchPollMs} — polling until Ctrl+C (idle cycles do not post standups).`,
+    );
+    let first = true;
+    for (;;) {
+      await runCycle({
+        watchMode: true,
+        logBanner: first,
+      });
+      first = false;
+      await sleep(watchPollMs);
+    }
+  }
+
+  await runCycle({ watchMode: false, logBanner: true });
 }
 
 main().catch((e) => {
